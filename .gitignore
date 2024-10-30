@@ -1,0 +1,7 @@
+dist/
+bin/
+docs/
+*.o
+*.a
+*.so
+*.exe
