@@ -2,7 +2,6 @@
 #include <stddef.h>
 #include <simple-pcypher/simple-pcypher.h>
 #include "test.h"
-#include "test-simple-pcypher-calc-key.h"
 
 static void testcase (){
   simple_pcypher_key key;
@@ -19,6 +18,7 @@ static void testcase2 (){
 static void testcase3 (){
   simple_pcypher_key key;
   TEST(simple_pcypher_calc_key(0, SIZE_MAX, &key) != 0, "");
+  TEST(simple_pcypher_errno == SIMPLE_PCYPHER_ERRNO_COULD_NOT_FIND_BEST_PRIME_NUMBER);
 }
 
 void test_simple_pcypher_calc_key (){

@@ -69,6 +69,7 @@ static void testcase (){
   {
     uint8_t decrypteddata[1024];
     TEST(simple_pcypher_decrypt(0, 1024, encrypteddata, sizeof(encrypteddata), key, decrypteddata) != 0, "");
+    TEST(simple_pcypher_errno == SIMPLE_PCYPHER_ERRNO_INDEX_OUT_OF_RANGE);
   }
 
   //decrypt (always error2).
@@ -76,6 +77,7 @@ static void testcase (){
   {
     uint8_t decrypteddata[1];
     TEST(simple_pcypher_decrypt(1024, 1, encrypteddata, sizeof(encrypteddata), key, decrypteddata) != 0, "");
+    TEST(simple_pcypher_errno == SIMPLE_PCYPHER_ERRNO_INDEX_OUT_OF_RANGE);
   }
 }
 
@@ -146,6 +148,7 @@ static void testcase2 (){
   {
     uint8_t decrypteddata[1024];
     TEST(simple_pcypher_decrypt(0, 1024, encrypteddata, sizeof(encrypteddata), key, decrypteddata) != 0, "");
+    TEST(simple_pcypher_errno == SIMPLE_PCYPHER_ERRNO_INDEX_OUT_OF_RANGE);
   }
 
   //decrypt (always error2).
@@ -153,6 +156,7 @@ static void testcase2 (){
   {
     uint8_t decrypteddata[1];
     TEST(simple_pcypher_decrypt(1024, 1, encrypteddata, sizeof(encrypteddata), key, decrypteddata) != 0, "");
+    TEST(simple_pcypher_errno == SIMPLE_PCYPHER_ERRNO_INDEX_OUT_OF_RANGE);
   }
 }
 

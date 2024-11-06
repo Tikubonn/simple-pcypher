@@ -9,10 +9,10 @@
 #include <simple-pcypher/simple-pcypher.h>
 #include "buffer.h"
 
-typedef enum cypher_mode {
-  CYPHER_ENCRYPTION,
-  CYPHER_DECRYPTION,
-} cypher_mode;
+typedef enum mode {
+  MODE_ENCRYPTION,
+  MODE_DECRYPTION,
+} mode;
 
 static inline int parse_uint_as_hexadecimal (const char *str, uintmax_t *valuep){
   uintmax_t value = 0;
@@ -78,16 +78,16 @@ static inline int parse_uint (const char *str, uintmax_t *valuep){
   }
 }
 
-static inline int parse_args (int argc, char **argv, cypher_mode *modep, FILE **inputp, FILE **outputp, size_t *positionp, size_t *sizep, bool *givensizep, simple_pcypher_key *keybasep, bool *showhelpp, bool *showversionp){
-  cypher_mode mode = CYPHER_ENCRYPTION;
+static inline int parse_args (int argc, char **argv, mode *modep, FILE **inputp, FILE **outputp, size_t *positionp, size_t *sizep, bool *givensizep, simple_pcypher_key *keybasep, bool *showhelpp, bool *showversionp){
+  mode mode = MODE_ENCRYPTION;
   bool givenmode = false;
   char *inputfile = NULL;
   char *outputfile = NULL;
   uintmax_t position = 0;
-  bool givenposition = false;
   uintmax_t size;
-  bool givensize = false;
   uintmax_t keybase;
+  bool givenposition = false;
+  bool givensize = false;
   bool givenkeybase = false;
   bool showhelp = false; 
   bool showversion = false;
@@ -105,7 +105,7 @@ static inline int parse_args (int argc, char **argv, cypher_mode *modep, FILE **
     else 
     if (strcmp(argv[index], "-e") == 0){
       if (!givenmode){
-        mode = CYPHER_ENCRYPTION;
+        mode = MODE_ENCRYPTION;
         givenmode = true;
         index += 1;
       }
@@ -117,7 +117,7 @@ static inline int parse_args (int argc, char **argv, cypher_mode *modep, FILE **
     else 
     if (strcmp(argv[index], "-d") == 0){
       if (!givenmode){
-        mode = CYPHER_DECRYPTION;
+        mode = MODE_DECRYPTION;
         givenmode = true;
         index += 1;
       }
@@ -215,9 +215,11 @@ static inline int parse_args (int argc, char **argv, cypher_mode *modep, FILE **
     }
   }
   if (showhelp){
-    *modep = CYPHER_ENCRYPTION;
+    *modep = MODE_ENCRYPTION;
     *inputp = stdin;
     *outputp = stdout;
+    *positionp = 0;
+    *sizep = 0;
     *givensizep = false;
     *showhelpp = true;
     *showversionp = false;
@@ -225,9 +227,11 @@ static inline int parse_args (int argc, char **argv, cypher_mode *modep, FILE **
   }
   else 
   if (showversion){
-    *modep = CYPHER_ENCRYPTION;
+    *modep = MODE_ENCRYPTION;
     *inputp = stdin;
     *outputp = stdout;
+    *positionp = 0;
+    *sizep = 0;
     *givensizep = false;
     *showhelpp = false;
     *showversionp = true;
@@ -254,9 +258,6 @@ static inline int parse_args (int argc, char **argv, cypher_mode *modep, FILE **
         output = fopen(outputfile, "wb");
         if (output == NULL){
           fprintf(stderr, "Could not open file \"%s\" (errno = %d).\n", outputfile, errno);
-          if (fclose(input) == EOF){
-            fprintf(stderr, "Could not close file \"%s\" (errno = %d).\n", inputfile, errno);
-          }
           return 1;
         }
       }
@@ -278,6 +279,97 @@ static inline int parse_args (int argc, char **argv, cypher_mode *modep, FILE **
   }
 }
 
+static void *read_all_input (FILE *input, size_t *writtensizep){
+  buffer buffer;
+  buffer_setup(&buffer);
+  while (true){
+    char data[4096];
+    size_t datasize = fread(data, 1, sizeof(data), input);
+    if (0 < datasize){
+      if (buffer_write(data, datasize, &buffer)){
+        fprintf(stderr, "Caused some error at writing to buffer (errno = %d).\n", errno);
+        return NULL;
+      }
+    }
+    if (datasize < sizeof(data)){
+      if (ferror(input)){
+        fprintf(stderr, "Caused some error at reading from file (errno = %d).\n", errno);
+        return NULL;
+      }
+      else {
+        break;
+      }
+    }
+  }
+  uint8_t *bufferdata;
+  buffer_data(&buffer, &bufferdata, writtensizep);
+  return bufferdata;
+}
+
+static int encrypt (simple_pcypher_key keybase, FILE *input, FILE *output){
+  size_t datasize;
+  void *data = read_all_input(input, &datasize);
+  if (data == NULL){
+    return 1;
+  }
+  size_t encrypteddatasize;
+  if (simple_pcypher_calc_encrypted_data_size(datasize, &encrypteddatasize)){
+    fprintf(stderr, "Could not find a prime number used to encrypted data size by %zu.\n", datasize);
+    return 1;
+  }
+  simple_pcypher_key key;
+  if (simple_pcypher_calc_key(keybase, encrypteddatasize, &key)){
+    fprintf(stderr, "Could not find a prime number used to cypher key by %zu and %zu.\n", keybase, encrypteddatasize);
+    return 1;
+  }
+  uint8_t *encrypteddata = malloc(encrypteddatasize);
+  if (encrypteddata == NULL){
+    fprintf(stderr, "Could not allocate memory (size = %zu).\n", encrypteddatasize);
+    return 1;
+  }
+  if (simple_pcypher_encrypt(data, datasize, key, encrypteddata, encrypteddatasize)){
+    char *message = simple_pcypher_errno_message(simple_pcypher_errno);
+    fprintf(stderr, "Caused some error at simple_pcypher_encrypt() (simple_pcypher_errno=%d, %s).", simple_pcypher_errno, message); 
+    return 1;
+  }
+  size_t writtensize = fwrite(encrypteddata, 1, encrypteddatasize, output);
+  if (writtensize < encrypteddatasize){
+    fprintf(stderr, "Caused some error at writing into a file.\n");
+    return 1;
+  }
+  return 0;
+}
+
+static int decrypt (size_t position, size_t size, bool givensize, simple_pcypher_key keybase, FILE *input, FILE *output){
+  size_t datasize;
+  void *data = read_all_input(input, &datasize);
+  if (data == NULL){
+    return 1;
+  }
+  size_t finalizedsize = givensize? size: datasize;
+  simple_pcypher_key key;
+  if (simple_pcypher_calc_key(keybase, finalizedsize, &key)){
+    fprintf(stderr, "Could not find a prime number used to cypher key by %zu and %zu.\n", keybase, finalizedsize);
+    return 1;
+  }
+  uint8_t *decrypteddata = malloc(finalizedsize);
+  if (decrypteddata == NULL){
+    fprintf(stderr, "Could not allocate memory (size = %zu).\n", finalizedsize);
+    return 1;
+  }
+  if (simple_pcypher_decrypt(position, finalizedsize, data, datasize, key, decrypteddata)){
+    char *message = simple_pcypher_errno_message(simple_pcypher_errno);
+    fprintf(stderr, "Caused some error at simple_pcypher_decrypt() (simple_pcypher_errno=%d, %s).", simple_pcypher_errno, message); 
+    return 1;
+  }
+  size_t writtensize = fwrite(decrypteddata, 1, finalizedsize, output);
+  if (writtensize < finalizedsize){
+    fprintf(stderr, "Caused some error at writing into a file.\n");
+    return 1;
+  }
+  return 0;
+}
+
 const char HELP_MESSAGE[] = 
 "Usage: simple-pcypher [OPTION]... -k KEY [FILE]\n"
 "Encrypt or decrypt FILE with simple-pcypher.\n"
@@ -297,7 +389,7 @@ const char VERSION_MESSAGE[] =
 ;
 
 int main (int argc, char **argv){
-  cypher_mode mode;
+  mode mode;
   FILE *input;
   FILE *output;
   size_t position;
@@ -310,99 +402,21 @@ int main (int argc, char **argv){
     return 1;
   }
   if (showhelp){
-    size_t writtensize = fwrite(HELP_MESSAGE, 1, sizeof(HELP_MESSAGE), stdout);
-    if (writtensize < sizeof(HELP_MESSAGE)){
-      if (ferror(stdout)){
-        fprintf(stderr, "Caused some error at writing into a file.\n");
-        return 1;
-      }
-    }
+    printf("%s", HELP_MESSAGE);
     return 0;
   }
   else 
   if (showversion){
-    size_t writtensize = fwrite(VERSION_MESSAGE, 1, sizeof(VERSION_MESSAGE), stdout);
-    if (writtensize < sizeof(VERSION_MESSAGE)){
-      if (ferror(stdout)){
-        fprintf(stderr, "Caused some error at writing into a file.\n");
-        return 1;
-      }
-    }
+    printf("%s", VERSION_MESSAGE);
     return 0;
   }
   else {
-    buffer buffer;
-    buffer_setup(&buffer);
-    while (true){
-      uint8_t readdata[4096];
-      size_t readsize = fread(readdata, 1, sizeof(readdata), input);
-      if (readsize < sizeof(readdata)){
-        if (ferror(input)){
-          fprintf(stderr, "Caused some error at reading a file.\n");
-          return 1;
-        }
-        if (readsize == 0){
-          break;
-        }
-      }
-      if (buffer_write(readdata, readsize, &buffer)){
-        return 1;
-      }
-    }
-    uint8_t *bufferdata;
-    size_t buffersize;
-    buffer_data(&buffer, &bufferdata, &buffersize);
     switch (mode){
-      case CYPHER_ENCRYPTION: {
-        size_t encrypteddatasize;
-        if (simple_pcypher_calc_encrypted_data_size(buffersize, &encrypteddatasize)){
-          fprintf(stderr, "Could not find a prime number used to encrypted data size by %zu.\n", buffersize);
-          return 1;
-        }
-        simple_pcypher_key key;
-        if (simple_pcypher_calc_key(keybase, encrypteddatasize, &key)){
-          fprintf(stderr, "Could not find a prime number used to cypher key by %zu and %zu.\n", keybase, encrypteddatasize);
-          return 1;
-        }
-        uint8_t *encrypteddata = malloc(encrypteddatasize);
-        if (encrypteddata == NULL){
-          fprintf(stderr, "Could not allocate memory (size = %zu).\n", encrypteddatasize);
-          return 1;
-        }
-        if (simple_pcypher_encrypt(bufferdata, buffersize, key, encrypteddata, encrypteddatasize)){
-          return 1;
-        }
-        size_t writtensize = fwrite(encrypteddata, 1, encrypteddatasize, output);
-        if (writtensize < encrypteddatasize){
-          fprintf(stderr, "Caused some error at writing into a file.\n");
-          return 1;
-        }
-        return 0;
-      }
-      case CYPHER_DECRYPTION: {
-        size_t finalizedsize = givensize? size: buffersize;
-        simple_pcypher_key key;
-        if (simple_pcypher_calc_key(keybase, finalizedsize, &key)){
-          fprintf(stderr, "Could not find a prime number used to cypher key by %zu and %zu.\n", keybase, finalizedsize);
-          return 1;
-        }
-        uint8_t *decrypteddata = malloc(finalizedsize);
-        if (decrypteddata == NULL){
-          fprintf(stderr, "Could not allocate memory (size = %zu).\n", finalizedsize);
-          return 1;
-        }
-        if (simple_pcypher_decrypt(position, finalizedsize, bufferdata, buffersize, key, decrypteddata)){
-          return 1;
-        }
-        size_t writtensize = fwrite(decrypteddata, 1, finalizedsize, output);
-        if (writtensize < finalizedsize){
-          fprintf(stderr, "Caused some error at writing into a file.\n");
-          return 1;
-        }
-        return 0;
-      }
+      case MODE_ENCRYPTION:
+        return encrypt(keybase, input, output);
+      case MODE_DECRYPTION: 
+        return decrypt(position, size, givensize, keybase, input, output);
       default:
-        fprintf(stderr, "Unknown cypher mode was given (%d).\n", mode);
         return 1;
     }
   }

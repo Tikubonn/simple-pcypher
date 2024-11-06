@@ -6,6 +6,10 @@ export CFLAGS+=-I$(SIMPLE_PCYPHER_INCLUDE) -L$(SIMPLE_PCYPHER_LIB) -g
 all: bin/test
 	gdb bin/test
 
+.PHONY: test-bin
+test-bin: scripts/test-simple-pcypher.bash scripts/test.bash
+	env PATH="$(PATH):$(SIMPLE_PCYPHER_BIN)" ./scripts/test-simple-pcypher.bash
+
 .PHONY: clean
 clean: 
 	rm -f src/test-simple-pcypher-calc-encrypted-data-size.o

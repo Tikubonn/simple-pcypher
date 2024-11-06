@@ -7,6 +7,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#include <threads.h>
 
 /**
  * @brief 各種暗号関数で利用される鍵素数を保存するための型です。
@@ -49,7 +50,7 @@ extern thread_local _simple_pcypher_errno simple_pcypher_errno;
  * @note 未定義の値が errno に指定された場合、この関数は `"Unknown errno given."` を返します。
  */
 
-extern char __stdcall *simple_xcypher_errno_message (_simple_xcypher_errno errno);
+extern char __stdcall *simple_pcypher_errno_message (_simple_pcypher_errno err);
 
 /**
  * @brief 暗号化されたデータを保存する領域の大きさを求めます。

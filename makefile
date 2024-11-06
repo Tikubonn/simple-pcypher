@@ -16,6 +16,10 @@ clean:
 test: all 
 	make -C test SIMPLE_PCYPHER_INCLUDE=$(CURDIR)/dist/include SIMPLE_PCYPHER_LIB=$(CURDIR)/dist/lib
 
+.PHONY: test-bin
+test-bin: all
+	make -C test test-bin SIMPLE_PCYPHER_BIN=$(CURDIR)/bin
+
 src/simple-pcypher.o: src/simple-pcypher.c src/simple-pcypher.h
 	$(GCC) $(CFLAGS) -c -o src/simple-pcypher.o src/simple-pcypher.c
 

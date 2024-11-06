@@ -8,8 +8,8 @@
 
 thread_local _simple_pcypher_errno simple_pcypher_errno = SIMPLE_PCYPHER_ERRNO_NONE;
 
-char __stdcall *simple_xcypher_errno_message (_simple_xcypher_errno errno){
-  switch (errno){
+char __stdcall *simple_pcypher_errno_message (_simple_pcypher_errno err){
+  switch (err){
     case SIMPLE_PCYPHER_ERRNO_NONE:
       return "None.";
     case SIMPLE_PCYPHER_ERRNO_COULD_NOT_FIND_BEST_PRIME_NUMBER:
@@ -54,7 +54,7 @@ int __stdcall simple_pcypher_calc_encrypted_data_size (size_t datasize, size_t *
       return 0;
     }
   }
-  simple_pcypher_errno = SIMPLE_PCYPHER_ERRNO_COULD_NOT_FIND_PRIME_NUMBER;
+  simple_pcypher_errno = SIMPLE_PCYPHER_ERRNO_COULD_NOT_FIND_BEST_PRIME_NUMBER;
   return 1;
 }
 
@@ -73,7 +73,7 @@ int __stdcall simple_pcypher_calc_key (simple_pcypher_key keybase, size_t encryp
       return 0;
     }
   }
-  simple_pcypher_errno = SIMPLE_PCYPHER_ERRNO_COULD_NOT_FIND_PRIME_NUMBER;
+  simple_pcypher_errno = SIMPLE_PCYPHER_ERRNO_COULD_NOT_FIND_BEST_PRIME_NUMBER;
   return 1;
 }
 
@@ -107,7 +107,7 @@ int __stdcall simple_pcypher_encrypt (const void *data, size_t datasize, simple_
     return 0;
   }
   else {
-    simple_pcypher_errno = SIMPLE_PCYPHER_ERRNO_KEY_AND_BLOCK_ARE_OVERFLOW;
+    simple_pcypher_errno = SIMPLE_PCYPHER_ERRNO_KEY_AND_BLOCK_ARE_OVERSIZE;
     return 1;
   }
 }
@@ -130,7 +130,7 @@ int __stdcall simple_pcypher_decrypt (size_t position, size_t size, const void *
     }
   }
   else {
-    simple_pcypher_errno = SIMPLE_PCYPHER_ERRNO_KEY_AND_BLOCK_ARE_OVERFLOW;
+    simple_pcypher_errno = SIMPLE_PCYPHER_ERRNO_KEY_AND_BLOCK_ARE_OVERSIZE;
     return 1;
   }
 }
